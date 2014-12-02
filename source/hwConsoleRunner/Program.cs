@@ -1,7 +1,10 @@
 ﻿using System;
+using System.Collections.Generic;
 using HydrantWiki.Library.Constants;
 using HydrantWiki.Library.Managers;
+using HydrantWiki.Library.Objects;
 using TreeGecko.Library.Common.Enums;
+using TreeGecko.Library.Common.Helpers;
 using TreeGecko.Library.Net.Enums;
 using TreeGecko.Library.Net.Objects;
 
@@ -11,6 +14,8 @@ namespace hwConsoleRunner
     {
         static void Main(string[] _args)
         {
+            TraceFileHelper.SetupLogging();
+
             if (_args != null
                 && _args.Length > 0)
             {
@@ -36,10 +41,61 @@ namespace hwConsoleRunner
                     case "buildcannedemail":
                         BuildEmail();
                         break;
+                    case "generateratings":
+                        GenerateRatings();
+                        break;
                     default:
                         Console.WriteLine("No action requested");
                         break;
                 }
+            }
+
+            TraceFileHelper.TearDownLogging();
+        }
+
+        private static void GenerateRatings()
+        {
+            HydrantWikiManager hwm = new HydrantWikiManager();
+            List<User> users = hwm.GetUsers();
+
+            foreach (User user in users)
+            {
+                TraceFileHelper.Verbose(string.Format("Processing {0} - {1}", 
+                    user.UserSource, user.Username));
+                int pending = 0;
+                int rejected = 0;
+                int approved = 0;
+
+                List<Tag> tags = hwm.GetTagsForUser(user.Guid);
+
+                foreach (Tag tag in tags)
+                {
+                    if (tag.Status == TagStatus.Approved)
+                    {
+                        approved ++;
+                    }
+                    else if (tag.Status == TagStatus.Pending)
+                    {
+                        pending ++;
+                    }
+                    else if (tag.Status == TagStatus.Rejected)
+                    {
+                        rejected ++;
+                    }
+                }
+
+                UserStats stats = hwm.GetUserStats(user.Guid);
+
+                if (stats == null)
+                {
+                    stats = new UserStats();
+                }
+                stats.UserGuid = user.Guid;
+                stats.ApprovedTagCount = approved;
+                stats.PendingTagCount = pending;
+                stats.RejectedTagCount = rejected;
+
+                hwm.Persist(stats);
             }
         }
 
@@ -75,7 +131,7 @@ namespace hwConsoleRunner
                 Subject = "HydrantWiki Email Validation",
                 To = "[[EmailAddress]]",
                 Body =
-                    "<p>Please click the following link to complete your setup as a HydrantWiki user. <a href=\"[[SystemUrl]]/rest/emailvalidation/[[ValidationText]]\">Validate my Email</a></p>"
+                    "<p>Please click the following link to complete your setup as a HydrantWiki user. <a href=\"[[SystemUrl]]/emailvalidation/[[ValidationText]]\">Validate my Email</a></p>"
             };
             hwm.Persist(emailAddressValidateEmail);
         }
